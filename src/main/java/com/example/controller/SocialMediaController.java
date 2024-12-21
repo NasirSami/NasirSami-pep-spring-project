@@ -1,7 +1,9 @@
 package com.example.controller;
 
 import com.example.entity.Account;
+import com.example.entity.Message;
 import com.example.repository.AccountRepository;
+import com.example.repository.MessageRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -18,10 +20,13 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping
 public class SocialMediaController {
     private final AccountRepository accountRepository;
+    private final MessageRepository messageRepository;
 
     @Autowired
-    public SocialMediaController(AccountRepository accountRepository) {
+    public SocialMediaController(AccountRepository accountRepository,
+                                 MessageRepository messageRepository) {
         this.accountRepository = accountRepository;
+        this.messageRepository = messageRepository;
     }
 
     @PostMapping("/register")
@@ -61,5 +66,23 @@ public class SocialMediaController {
                 .orElseGet(() -> {
                     return new ResponseEntity<>(HttpStatus.UNAUTHORIZED);
                 });
+    }
+
+    @PostMapping("/messages")
+    public ResponseEntity<Message> createNewMessage(@RequestBody Message newMessage) {
+        if (newMessage.getMessageText() == null
+                || newMessage.getMessageText().trim().isEmpty()
+                || newMessage.getMessageText().length() > 255) {
+            return ResponseEntity.badRequest().build();  // 400
+        }
+
+        Integer postedBy = newMessage.getPostedBy();
+        if (postedBy == null || !accountRepository.findById(postedBy).isPresent()) {
+            return ResponseEntity.badRequest().build();  // 400
+        }
+
+        Message savedMessage = messageRepository.save(newMessage);
+
+        return ResponseEntity.ok(savedMessage);
     }
 }
