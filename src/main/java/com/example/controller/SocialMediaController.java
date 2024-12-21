@@ -2,8 +2,8 @@ package com.example.controller;
 
 import com.example.entity.Account;
 import com.example.entity.Message;
-import com.example.repository.AccountRepository;
-import com.example.repository.MessageRepository;
+import com.example.service.AccountService;
+import com.example.service.MessageService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -11,7 +11,6 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Optional;
-import java.util.Map;
 
 /**
  * TODO: You will need to write your own endpoints and handlers for your controller using Spring. The endpoints you will need can be
@@ -23,131 +22,92 @@ import java.util.Map;
 @RestController
 @RequestMapping
 public class SocialMediaController {
-    private final AccountRepository accountRepository;
-    private final MessageRepository messageRepository;
+    private final AccountService accountService;
+    private final MessageService messageService;
 
     @Autowired
-    public SocialMediaController(AccountRepository accountRepository,
-                                 MessageRepository messageRepository) {
-        this.accountRepository = accountRepository;
-        this.messageRepository = messageRepository;
+    public SocialMediaController(AccountService accountService,
+                                 MessageService messageService) {
+        this.accountService = accountService;
+        this.messageService = messageService;
     }
 
     @PostMapping("/register")
     public ResponseEntity<Account> register(@RequestBody Account newAccount) {
-        if (newAccount.getUsername() == null || newAccount.getUsername().trim().isEmpty()) {
+        try {
+            Account created = accountService.createAccount(newAccount);
+            return ResponseEntity.ok(created);
+        } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().build();
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(409).build();
         }
-        
-        if (newAccount.getPassword() == null || newAccount.getPassword().length() < 4) {
-            return ResponseEntity.badRequest().build();
-        }
-        
-        if (accountRepository.findByUsername(newAccount.getUsername()).isPresent()) {
-            return ResponseEntity.status(HttpStatus.CONFLICT).build();
-        }
-        
-        Account savedAccount = accountRepository.save(newAccount);
-        
-        return ResponseEntity.ok(savedAccount);
     }
 
     @PostMapping("/login")
     public ResponseEntity<Account> login(@RequestBody Account loginRequest) {
         if (loginRequest.getUsername() == null || loginRequest.getPassword() == null) {
-            return new ResponseEntity<>(HttpStatus.UNAUTHORIZED);
+            return ResponseEntity.status(401).build();
         }
-        
-        return accountRepository
-                .findByUsername(loginRequest.getUsername())
-                .map(foundAccount -> {
-                    if (foundAccount.getPassword().equals(loginRequest.getPassword())) {
-                        return ResponseEntity.ok(foundAccount);
-                    } else {
-                        return new ResponseEntity<Account>(HttpStatus.UNAUTHORIZED);
-                    }
-                })
-                .orElseGet(() -> {
-                    return new ResponseEntity<>(HttpStatus.UNAUTHORIZED);
-                });
+        Optional<Account> maybeAccount = accountService.findByUsername(loginRequest.getUsername());
+        if (maybeAccount.isPresent() && maybeAccount.get().getPassword().equals(loginRequest.getPassword())) {
+            return ResponseEntity.ok(maybeAccount.get());
+        } else {
+            return ResponseEntity.status(401).build();
+        }
     }
 
     @PostMapping("/messages")
-    public ResponseEntity<Message> createNewMessage(@RequestBody Message newMessage) {
-        if (newMessage.getMessageText() == null
-                || newMessage.getMessageText().trim().isEmpty()
-                || newMessage.getMessageText().length() > 255) {
-            return ResponseEntity.badRequest().build();  // 400
+    public ResponseEntity<Message> createMessage(@RequestBody Message newMessage) {
+        try {
+            Message created = messageService.createMessage(newMessage);
+            return ResponseEntity.ok(created);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().build();
         }
-
-        Integer postedBy = newMessage.getPostedBy();
-        if (postedBy == null || !accountRepository.findById(postedBy).isPresent()) {
-            return ResponseEntity.badRequest().build();  // 400
-        }
-
-        Message savedMessage = messageRepository.save(newMessage);
-
-        return ResponseEntity.ok(savedMessage);
     }
 
     @GetMapping("/messages")
     public ResponseEntity<List<Message>> getAllMessages() {
-        List<Message> messages = messageRepository.findAll();
-
+        List<Message> messages = messageService.getAllMessages();
         return ResponseEntity.ok(messages);
     }
 
     @GetMapping("/messages/{message_id}")
     public ResponseEntity<Message> getOneMessage(@PathVariable("message_id") Integer messageId) {
-        Optional<Message> optionalMessage = messageRepository.findById(messageId);
-
-        return optionalMessage
-                .map(ResponseEntity::ok)         
-                .orElseGet(() -> ResponseEntity.ok().build()); 
-    }
-
-    @DeleteMapping("/messages/{message_id}")
-    public ResponseEntity<?> deleteMessage(@PathVariable("message_id") Integer messageId) {
-        Optional<Message> optionalMessage = messageRepository.findById(messageId);
-
-        if (optionalMessage.isPresent()) {
-            messageRepository.delete(optionalMessage.get());
-
-            return ResponseEntity.ok(1);
-        } else {
-            return ResponseEntity.ok().build();
-        }
+        Optional<Message> maybeMessage = messageService.getMessageById(messageId);
+        return maybeMessage
+            .map(ResponseEntity::ok)
+            .orElseGet(() -> ResponseEntity.ok().build());
     }
 
     @PatchMapping("/messages/{message_id}")
-    public ResponseEntity<Integer> updateMessage(@PathVariable("message_id") Integer messageId,
-                                                 @RequestBody Map<String, Object> updates) {
+    public ResponseEntity<Integer> updateMessage(
+            @PathVariable("message_id") Integer messageId,
+            @RequestBody Message requestBody) {
         try {
-            Optional<Message> optionalMessage = messageRepository.findById(messageId);
-            if (optionalMessage.isEmpty()) {
-                return ResponseEntity.badRequest().build();
-            }
-
-            Message existingMessage = optionalMessage.get();
-
-            Object newTextObj = updates.get("messageText");
-            if (newTextObj == null) {
-                return ResponseEntity.badRequest().build();
-            }
-
-            String newText = newTextObj.toString();
-
-            if (newText.trim().isEmpty() || newText.length() > 255) {
-                return ResponseEntity.badRequest().build();
-            }
-
-            existingMessage.setMessageText(newText);
-            messageRepository.save(existingMessage);
-
+            // Combine path ID and request body to form the updated message
+            requestBody.setMessageId(messageId);
+            messageService.updateMessage(requestBody);
             return ResponseEntity.ok(1);
-
-        } catch (Exception e) {
+        } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().build();
         }
+    }
+
+    @DeleteMapping("/messages/{message_id}")
+    public ResponseEntity<Integer> deleteMessage(@PathVariable("message_id") Integer messageId) {
+        boolean deleted = messageService.deleteMessageById(messageId);
+        if (deleted) {
+            return ResponseEntity.ok(1);
+        } else {
+            return ResponseEntity.ok().build(); 
+        }
+    }
+
+    @GetMapping("/accounts/{account_id}/messages")
+    public ResponseEntity<List<Message>> getAllMessagesFromUser(@PathVariable("account_id") Integer accountId) {
+        List<Message> userMessages = messageService.getAllMessagesByAccountId(accountId);
+        return ResponseEntity.ok(userMessages);
     }
 }
