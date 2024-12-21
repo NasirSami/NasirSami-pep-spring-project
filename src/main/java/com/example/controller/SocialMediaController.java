@@ -42,4 +42,24 @@ public class SocialMediaController {
         
         return ResponseEntity.ok(savedAccount);
     }
+
+    @PostMapping("/login")
+    public ResponseEntity<Account> login(@RequestBody Account loginRequest) {
+        if (loginRequest.getUsername() == null || loginRequest.getPassword() == null) {
+            return new ResponseEntity<>(HttpStatus.UNAUTHORIZED);
+        }
+        
+        return accountRepository
+                .findByUsername(loginRequest.getUsername())
+                .map(foundAccount -> {
+                    if (foundAccount.getPassword().equals(loginRequest.getPassword())) {
+                        return ResponseEntity.ok(foundAccount);
+                    } else {
+                        return new ResponseEntity<Account>(HttpStatus.UNAUTHORIZED);
+                    }
+                })
+                .orElseGet(() -> {
+                    return new ResponseEntity<>(HttpStatus.UNAUTHORIZED);
+                });
+    }
 }
