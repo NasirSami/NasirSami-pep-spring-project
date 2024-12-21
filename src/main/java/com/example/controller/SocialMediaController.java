@@ -10,6 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
  * TODO: You will need to write your own endpoints and handlers for your controller using Spring. The endpoints you will need can be
@@ -93,5 +94,14 @@ public class SocialMediaController {
         List<Message> messages = messageRepository.findAll();
 
         return ResponseEntity.ok(messages);
+    }
+
+    @GetMapping("/messages/{message_id}")
+    public ResponseEntity<Message> getOneMessage(@PathVariable("message_id") Integer messageId) {
+        Optional<Message> optionalMessage = messageRepository.findById(messageId);
+
+        return optionalMessage
+                .map(ResponseEntity::ok)         
+                .orElseGet(() -> ResponseEntity.ok().build()); 
     }
 }
