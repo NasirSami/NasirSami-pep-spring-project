@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Map;
 
 /**
  * TODO: You will need to write your own endpoints and handlers for your controller using Spring. The endpoints you will need can be
@@ -103,5 +104,50 @@ public class SocialMediaController {
         return optionalMessage
                 .map(ResponseEntity::ok)         
                 .orElseGet(() -> ResponseEntity.ok().build()); 
+    }
+
+    @DeleteMapping("/messages/{message_id}")
+    public ResponseEntity<?> deleteMessage(@PathVariable("message_id") Integer messageId) {
+        Optional<Message> optionalMessage = messageRepository.findById(messageId);
+
+        if (optionalMessage.isPresent()) {
+            messageRepository.delete(optionalMessage.get());
+
+            return ResponseEntity.ok(1);
+        } else {
+            return ResponseEntity.ok().build();
+        }
+    }
+
+    @PatchMapping("/messages/{message_id}")
+    public ResponseEntity<Integer> updateMessage(@PathVariable("message_id") Integer messageId,
+                                                 @RequestBody Map<String, Object> updates) {
+        try {
+            Optional<Message> optionalMessage = messageRepository.findById(messageId);
+            if (optionalMessage.isEmpty()) {
+                return ResponseEntity.badRequest().build();
+            }
+
+            Message existingMessage = optionalMessage.get();
+
+            Object newTextObj = updates.get("messageText");
+            if (newTextObj == null) {
+                return ResponseEntity.badRequest().build();
+            }
+
+            String newText = newTextObj.toString();
+
+            if (newText.trim().isEmpty() || newText.length() > 255) {
+                return ResponseEntity.badRequest().build();
+            }
+
+            existingMessage.setMessageText(newText);
+            messageRepository.save(existingMessage);
+
+            return ResponseEntity.ok(1);
+
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().build();
+        }
     }
 }
